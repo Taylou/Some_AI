@@ -9,10 +9,11 @@ A React Native chat app powered by Ollama AI models. In this lab you will add a 
 ```
 ┌─────────────────────────┐
 │   React Native App      │  (Expo — runs on your phone / emulator)
-│   components/           │
-│     ollamaClient.js     │
-│     service.js          │
-│     ChatView.js         │
+│   frontend/             │
+│     components/         │
+│       ollamaClient.js   │
+│       service.js        │
+│       ChatView.js       │
 └────────────┬────────────┘
              │  HTTP (port 3001)
              ▼
@@ -23,16 +24,18 @@ A React Native chat app powered by Ollama AI models. In this lab you will add a 
 └────────────┬────────────┘
              │  ioredis
              ▼
-┌─────────────────────────┐
-│   Redis 7               │
-│   (Docker, port 6379)   │
-└─────────────────────────┘
+┌─────────────────────────┐      ┌──────────────────────────┐
+│   Redis 7               │◀────▶│   RedisInsight (GUI)     │
+│   (Docker, port 6379)   │      │   (Docker, port 5540)    │
+└─────────────────────────┘      └──────────────────────────┘
 ```
 
 The Express backend sits between the app and Ollama. It:
 - Forwards chat messages to Ollama
 - Stores every conversation in Redis (persisted to disk via AOF)
 - Exposes REST endpoints so the app can retrieve past sessions
+
+**RedisInsight** is a web-based GUI for browsing the data inside Redis. Open `http://localhost:5540` to see the keys, lists, and sets your app has created — Redis itself does not speak HTTP, so you cannot view it directly in a browser.
 
 ---
 
@@ -51,33 +54,51 @@ Make sure Docker Desktop is **running** before you start.
 
 ## Step 1 — Open the project
 
-You should see this structure:
+You should see this two-service layout:
 
 ```
 some-ai/
-├── backend/           ← Express API (new)
+├── frontend/              ← Expo / React Native app
+│   ├── App.js
+│   ├── index.js           ← Expo entry point
+│   ├── app.json
+│   ├── package.json
+│   ├── assets/
+│   └── components/
+│       ├── ChatView.js
+│       ├── ollamaClient.js
+│       └── service.js
+├── backend/               ← Express API
 │   ├── .env.example
 │   ├── Dockerfile
-│   ├── index.js
+│   ├── index.js           ← Express entry point
 │   └── package.json
-├── components/        ← React Native components
-├── docker-compose.yml ← Redis + API services (new)
-├── App.js
+├── docker-compose.yml     ← Redis + API services
 └── README.md
 ```
+
+> **Why two folders?** The Expo app and the Express API are two separate projects with their own `package.json` and `index.js`. Keeping them in sibling folders makes the boundary obvious, gives each its own `node_modules`, and matches standard multi-service repo layout.
 
 ---
 
 ## Step 2 — Set your Ollama URL
 
-Open `docker-compose.yml` and find the `OLLAMA_URL` environment variable under the `api` service. Replace the IP with the address of the machine running Ollama on your network:
+Open `docker-compose.yml` and find the `OLLAMA_URL` under the `api` service:
 
 ```yaml
 environment:
-  - OLLAMA_URL=http://<YOUR_OLLAMA_IP>:11434   # ← change this
+  - OLLAMA_URL=http://host.docker.internal:11434
 ```
 
-> **How to find the IP:** On the Ollama machine run `ipconfig` (Windows) or `ip addr` (Linux/Mac) and look for the local network address (usually `192.168.x.x` or `10.x.x.x`).
+**`host.docker.internal`** is a special hostname that lets the API container reach services running on your **host machine** (i.e. the laptop running Docker). It works on Docker Desktop (Windows/Mac) and — thanks to the `extra_hosts` line in `docker-compose.yml` — on Linux too.
+
+Three scenarios:
+
+| Where Ollama runs | Value to use |
+|-------------------|--------------|
+| On the same machine as Docker | `http://host.docker.internal:11434` (default — no change needed) |
+| On another machine on your LAN | `http://<that-machine-IP>:11434` (run `ipconfig` / `ip addr` on it) |
+| In another Docker container | The container service name, e.g. `http://ollama:11434` |
 
 ---
 
@@ -103,9 +124,10 @@ docker compose ps
 Expected output:
 
 ```
-NAME              STATUS
-some-ai-api       running
-some-ai-redis     running
+NAME                       STATUS
+some-ai-api                running
+some-ai-redis              running
+some-ai-redisinsight       running
 ```
 
 To view live logs:
@@ -147,7 +169,7 @@ curl http://localhost:3001/api/health
 Expected:
 
 ```json
-{ "status": "ok", "redis": "ready", "ollama": "http://10.2.228.127:11434" }
+{ "status": "ok", "redis": "ready", "ollama": "http://host.docker.internal:11434" }
 ```
 
 ### Send a chat message
@@ -186,35 +208,75 @@ Expected:
 
 ---
 
-## Step 6 — Update the React Native app
+## Step 6 — Install frontend dependencies and start Expo
 
-The app currently talks directly to Ollama. You need to redirect it through the backend.
+Open a **new terminal** (leave Docker running in the first one) and install the Expo app's dependencies:
 
-Open `components/ollamaClient.js` and change the `baseUrl`:
-
-```js
-// Before
-constructor({ baseUrl = "http://10.2.228.127:11434" } = {}) {
-
-// After — point to the Express backend instead
-constructor({ baseUrl = "http://<YOUR_MACHINE_IP>:3001" } = {}) {
+```bash
+cd frontend
+npm install
+npm start
 ```
 
-> Replace `<YOUR_MACHINE_IP>` with the IP of the machine running Docker (the same one you used for Ollama, or your laptop's LAN IP).
+This boots the Expo dev server. Scan the QR code with Expo Go on your phone, or press `w` for web / `a` for Android emulator.
 
-Also update the `chat()` method to use the new endpoint path:
+> The backend has its own `package.json` inside `backend/`. You don't need to `npm install` it on your host — Docker handles that.
+
+---
+
+## Step 7 — Point the app at your backend
+
+The app is **already pre-wired** to call the Express backend (not Ollama directly). Look at `frontend/components/ollamaClient.js` to see how it works — `chat()` POSTs to `/api/chat` and the backend handles persistence + the Ollama proxy.
+
+The only thing you need to change is the **IP address** so your phone / emulator can reach the backend over the network. Open `frontend/components/ollamaClient.js`:
 
 ```js
-// Before
-const response = await fetch(`${this.baseUrl}/api/chat`, { ... });
-
-// After — same path, now hitting Express
-const response = await fetch(`${this.baseUrl}/api/chat`, { ... });
+constructor({ baseUrl = "http://172.24.208.1:3001" } = {}) {
 ```
 
-The path `/api/chat` is the same, so only the base URL needs to change.
+Replace the IP with your **own machine's LAN IP** (the laptop running Docker):
 
-Restart the Expo app (`npm start`) and send a message. Check `docker compose logs -f api` to confirm the backend receives the request and stores it in Redis.
+- **Windows:** `ipconfig` → look for "IPv4 Address" under your active Wi-Fi adapter
+- **Mac / Linux:** `ifconfig` or `ip addr` → look for `inet 192.168.x.x` or `inet 10.x.x.x`
+
+> Do **not** use `localhost` — on a phone, "localhost" is the phone itself, not your laptop. The web emulator (`npm run web`) is the one exception — `localhost` works there.
+
+After saving, reload the app and send a message. Tail the backend logs to confirm it's being hit:
+
+```bash
+docker compose logs -f api
+```
+
+You should see `POST /api/chat` lines appear with each message.
+
+---
+
+## Step 8 — Browse Redis data in RedisInsight
+
+Open your browser at **[http://localhost:5540](http://localhost:5540)**.
+
+On first launch:
+
+1. Accept the EULA / terms.
+2. Click **"Add Redis database"**.
+3. Fill in:
+
+   | Field | Value |
+   |-------|-------|
+   | Host  | `redis` |
+   | Port  | `6379` |
+   | Database alias | `some-ai` (or anything) |
+
+4. Click **"Add Database"**.
+
+The hostname `redis` works because RedisInsight runs in the same docker-compose network as the Redis container — they resolve each other by service name.
+
+Once connected, click the database, then **"Browser"** in the left nav. You should see:
+
+- `sessions` — a **SET** containing all session UUIDs
+- `session:<uuid>` — one **LIST** per conversation. Click into it to see every message (each entry is a JSON object with `role`, `content`, and `timestamp`).
+
+Send another message from the app — refresh RedisInsight and watch the list grow in real time. This is the easiest way to **see** what the backend is doing.
 
 ---
 
@@ -280,23 +342,26 @@ curl -X DELETE http://localhost:3001/api/sessions/<YOUR_SESSION_ID>
 
 ---
 
-### Exercise 3 — Wire the app to the backend
+### Exercise 3 — Add a "Clear chat" button in the app
 
-Update `components/ollamaClient.js` and `components/service.js` so that:
-1. The base URL points to the backend (port 3001) instead of Ollama directly
-2. The chat method sends a `sessionId` in the request body so the backend can group messages into the same session
-3. The `sessionId` returned by the backend is stored and reused for subsequent messages in the same conversation
+Once Exercise 2 (`DELETE /api/sessions/:sessionId`) works, wire it into the React Native UI.
+
+Add a button in `frontend/components/ChatView.js` that:
+
+1. Calls `DELETE http://<YOUR_MACHINE_IP>:3001/api/sessions/<currentSessionId>` to wipe the conversation from Redis.
+2. Clears the on-screen `messages` state.
+3. Calls `aiRef.current.resetSession()` so the next message starts a fresh session.
 
 **Hints:**
-- `AIService` in `service.js` can hold a `this.sessionId` property
-- Set it from the response of the first `/api/chat` call
-- Pass it on every subsequent call
+- The `AIService` instance already exposes `this.sessionId` and a `resetSession()` method (see `frontend/components/service.js`).
+- Place the button next to the model selector in the header.
+- Verify it worked by refreshing RedisInsight — the `session:<id>` list should disappear and the SET should shrink by one.
 
 ---
 
 ### Stretch Goal — Session selector UI
 
-Add a "History" button in `ChatView.js` that:
+Add a "History" button in `frontend/components/ChatView.js` that:
 1. Calls `GET /api/sessions` to fetch all session IDs
 2. Lets the user pick one
 3. Calls `GET /api/sessions/:sessionId` (Exercise 1) to load the messages
@@ -352,8 +417,14 @@ docker compose up --build -d
 | Problem | Fix |
 |---------|-----|
 | `PONG` not returned by redis-cli | Wait 10 s for the health check to pass, then retry |
-| `/api/chat` returns `502` | Check `OLLAMA_URL` in `docker-compose.yml` — wrong IP or Ollama not running |
-| App can't reach backend | Make sure the IP in `ollamaClient.js` matches your machine's LAN IP, not `localhost` (localhost on a phone means the phone itself) |
-| Container fails to build | Run `docker compose build --no-cache` to force a fresh build |
-| Port 3001 already in use | Change the host port in `docker-compose.yml`: `"3002:3001"` |
-| Port 6379 already in use | Another Redis instance is running — stop it or change the host port |
+| `http://localhost:6379` shows nothing in the browser | Redis is **not** an HTTP service — port 6379 speaks Redis's own binary protocol. A browser can't render it. Use **RedisInsight at [http://localhost:5540](http://localhost:5540)** to browse the data visually. |
+| Chat works but `docker compose logs api` is silent | The app is talking directly to Ollama instead of the backend. Check `baseUrl` in `frontend/components/ollamaClient.js` — it must be `http://<your-laptop-IP>:3001`, not `:11434`. |
+| `/api/chat` returns `502` | The API can't reach Ollama. Make sure Ollama is running on the host (`ollama serve`) and that `OLLAMA_URL` in `docker-compose.yml` is correct. If Ollama is on the same machine, it should be `http://host.docker.internal:11434`. |
+| `host.docker.internal` not resolving on Linux | The `extra_hosts: ["host.docker.internal:host-gateway"]` line handles this. If it still fails, replace the URL with your host's LAN IP. |
+| App can't reach backend | Make sure the IP in `frontend/components/ollamaClient.js` matches your machine's LAN IP, not `localhost` (localhost on a phone means the phone itself). |
+| RedisInsight says "host not found" | When adding the database, use host `redis` (not `localhost` or `127.0.0.1`) — it's the docker-compose service name. |
+| `npm install` errors in `frontend/` | Delete `frontend/node_modules` and `frontend/package-lock.json`, then re-run `npm install`. |
+| Container fails to build | Run `docker compose build --no-cache` to force a fresh build. |
+| Port 3001 already in use | Change the host port in `docker-compose.yml`: `"3002:3001"`. |
+| Port 5540 already in use | Change the host port in `docker-compose.yml`: `"5541:5540"`. |
+| Port 6379 already in use | Another Redis instance is running — stop it or change the host port. |

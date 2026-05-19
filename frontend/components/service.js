@@ -1,4 +1,10 @@
-// ai/aiService.js
+// frontend/components/service.js
+//
+// Thin wrapper around OllamaClient that:
+//   - tracks the active sessionId across messages
+//   - converts ChatView attachments into the shape the backend forwards to Ollama
+//   - returns just the reply string to ChatView
+//
 import { OllamaClient } from "./ollamaClient";
 
 export class AIService {
@@ -8,60 +14,59 @@ export class AIService {
     temperature = 0.7,
     baseUrl,
   } = {}) {
-    console.log(model);
     this.model = model;
     this.systemPrompt = systemPrompt;
     this.temperature = temperature;
     this.client = new OllamaClient({ baseUrl });
-  }
-
-  async ask(prompt) {
-    const response = await this.client.generate({
-      model: this.model,
-      prompt,
-      system: this.systemPrompt,
-      temperature: this.temperature,
-    });
-
-    return response.response;
+    this.sessionId = null; // assigned by the backend on first request
   }
 
   /**
-   * chat(messages)
+   * Send the chat history to the backend and return the assistant reply.
    *
-   * Each message may carry an optional `attachments` array produced by ChatView:
-   *   { type: "image" | "file", base64: string, mimeType: string, name: string }
+   * The backend handles persistence in Redis — we just forward the
+   * messages, the model, the system prompt, and any known sessionId.
    *
-   * Images are forwarded to Ollama's vision API as base64 strings.
-   * Non-image files have their content appended as text in the message body.
+   * @param {Array} messages [{ role, content, attachments? }]
+   * @returns {Promise<string>} the assistant reply
    */
   async chat(messages) {
-    const ollamaMessages = [
-      { role: "system", content: this.systemPrompt },
-      ...messages.map((msg) => this._toOllamaMessage(msg)),
-    ];
+    const backendMessages = messages.map((msg) => this._toOllamaMessage(msg));
 
-    const response = await this.client.chat({
+    const { sessionId, reply } = await this.client.chat({
       model: this.model,
-      messages: ollamaMessages,
-      temperature: this.temperature,
+      messages: backendMessages,
+      sessionId: this.sessionId,
+      systemPrompt: this.systemPrompt,
     });
 
-    return response.message?.content;
+    // Remember the sessionId so the next message lands in the same Redis list
+    this.sessionId = sessionId;
+    return reply;
+  }
+
+  /** Convenience: single-prompt send. Routes through chat() so it still persists. */
+  async ask(prompt) {
+    return this.chat([{ role: "user", content: prompt }]);
+  }
+
+  /** Forget the current session — the next message will start a fresh one. */
+  resetSession() {
+    this.sessionId = null;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   /**
    * Convert a ChatView message (with optional attachments) into the shape
-   * Ollama expects:
-   *   { role, content, images? }
+   * Ollama expects:  { role, content, images? }
    *
-   * Ollama vision models accept `images` as an array of raw base64 strings
-   * (no data-URI prefix).
+   * The backend forwards messages to Ollama as-is, so the conversion
+   * happens here in the frontend.
    *
-   * For non-image files we append the decoded text to the message content
-   * so text-based models can still reason about it.
+   * - Images become an array of raw base64 strings on `images`
+   *   (Ollama's vision field — works with LLaVA, etc.)
+   * - Non-image files have their decoded text appended to `content`
    */
   _toOllamaMessage(msg) {
     const { role, content, attachments } = msg;
@@ -96,14 +101,12 @@ export class AIService {
     return ollamaMsg;
   }
 
-  /** Decode a base64 string to UTF-8 text (works for plain text / PDFs / CSVs). */
+  /** Decode a base64 string to UTF-8 text (works for plain text / CSVs). */
   _decodeBase64Text(base64) {
-    // React Native global atob, or fallback
     const binary = typeof atob === "function"
       ? atob(base64)
       : Buffer.from(base64, "base64").toString("binary");
 
-    // Convert binary string to UTF-8
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);

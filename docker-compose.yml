@@ -24,13 +24,36 @@ services:
       - "3001:3001"
     environment:
       - REDIS_URL=redis://redis:6379
-      # Change this to your Ollama host IP (the machine running Ollama)
-      - OLLAMA_URL=http://10.2.228.127:11434
+      # host.docker.internal lets the container reach Ollama on the HOST machine.
+      # Works out of the box on Docker Desktop (Windows/Mac). Linux users: the
+      # extra_hosts entry below maps it to the host gateway.
+      # If Ollama runs on a DIFFERENT machine on your LAN, replace with that IP.
+      - OLLAMA_URL=http://host.docker.internal:11434
       - PORT=3001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       redis:
         condition: service_healthy
 
+  redisinsight:
+    # Web UI for browsing Redis data. Open http://localhost:5540 in your browser.
+    # On first launch, click "Add Redis database" and use:
+    #   Host: redis
+    #   Port: 6379
+    # (Both names work because the container is on the same docker network.)
+    image: redis/redisinsight:latest
+    container_name: some-ai-redisinsight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      - redis
+
 volumes:
   redis_data:
+    driver: local
+  redisinsight_data:
     driver: local
