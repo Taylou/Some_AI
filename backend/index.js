@@ -6,8 +6,8 @@ const { v4: uuidv4 } = require("uuid");
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3001;
-const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+const REDIS_URL = process.env.REDIS_URL || "redis://redis:6379";
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://172.24.208.1:11434";
 
 // ─── Redis client ─────────────────────────────────────────────────────────────
 

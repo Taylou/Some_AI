@@ -1,6 +1,6 @@
-FROM node:20-alpine
+FROM node:22.22.3-alpine3.23
 
-WORKDIR /app
+WORKDIR /some_ai/backend
 
 COPY package*.json ./
 RUN npm install --omit=dev
