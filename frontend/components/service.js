@@ -55,6 +55,19 @@ export class AIService {
     this.sessionId = null;
   }
 
+  /**
+   * Delete the current session from Redis (if any) and reset so the next
+   * message starts a fresh session. Safe to call when no session exists yet.
+   *
+   * @returns {Promise<void>}
+   */
+  async clearSession() {
+    if (this.sessionId) {
+      await this.client.deleteSession(this.sessionId);
+    }
+    this.resetSession();
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   /**

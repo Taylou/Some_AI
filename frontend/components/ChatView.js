@@ -23,10 +23,10 @@ import { AIService } from "./service";
 // ─── Available models ────────────────────────────────────────────────────────
 const MODELS = [
   { label: "DeepSeek R1 1.5b", value: "deepseek-r1:1.5b" },
-  { label: "DeepSeek R1 7b",   value: "deepseek-r1:7b" },
-  { label: "Llama 3.2 3b",     value: "llama3.2:3b" },
+  { label: "DeepSeek R1 14b",   value: "deepseek-r1:14b" },
+  { label: "Llama 3.2 Vision 11b",     value: "llama3.2-vision:11b" },
   { label: "Llama 3.1 8b",     value: "llama3.1:8b" },
-  { label: "LLaVA (vision)",   value: "llava" },
+  { label: "LLaVA (vision)",   value: "llava:7b" },
   { label: "Mistral 7b",       value: "mistral:7b" },
   { label: "Gemma 3 4b",       value: "gemma3:4b" },
   { label: "Phi-4 14b",        value: "phi4:14b" },
@@ -78,6 +78,20 @@ export default function ChatView({
     aiRef.current = null;
     setDropdownVisible(false);
     onModelChange && onModelChange(modelValue);
+  };
+
+  // ── Clear chat ───────────────────────────────────────────────────────────────
+  // Wipes the conversation from Redis (Exercise 2's DELETE endpoint), clears the
+  // on-screen messages, and resets the session so the next message starts fresh.
+  const clearChat = async () => {
+    if (isLoading) return;
+    try {
+      await getAI().clearSession();
+    } catch (error) {
+      console.error("Failed to clear session:", error);
+      Alert.alert("Error", "Could not clear the conversation on the server.");
+    }
+    setMessages([]);
   };
 
   const selectedLabel =
@@ -254,14 +268,25 @@ export default function ChatView({
         {showHeader && (
           <View style={styles.header}>
             <Text style={styles.title}>AI Chat</Text>
-            <TouchableOpacity
-              style={styles.modelButton}
-              onPress={() => setDropdownVisible(true)}
-              disabled={isLoading}
-            >
-              <Text style={styles.modelButtonText}>⚙ {selectedLabel}</Text>
-              <Text style={styles.chevron}>▾</Text>
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                testID="clear-chat-button"
+                style={styles.clearButton}
+                onPress={clearChat}
+                disabled={isLoading}
+              >
+                <Text style={styles.clearButtonText}>🗑 Clear</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="model-button"
+                style={styles.modelButton}
+                onPress={() => setDropdownVisible(true)}
+                disabled={isLoading}
+              >
+                <Text style={styles.modelButtonText}>⚙ {selectedLabel}</Text>
+                <Text style={styles.chevron}>▾</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -376,6 +401,7 @@ export default function ChatView({
           </TouchableOpacity>
 
           <TextInput
+            testID="message-input"
             style={styles.input}
             value={inputText}
             onChangeText={setInputText}
@@ -387,6 +413,7 @@ export default function ChatView({
           />
 
           <TouchableOpacity
+            testID="send-button"
             style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
             onPress={sendMessage}
             disabled={!canSend}
@@ -416,6 +443,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   title: { fontSize: 24, fontWeight: "bold", color: "#FFF" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  clearButton: {
+    backgroundColor: "#222",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  clearButtonText: { color: "#FF3B30", fontSize: 13, fontWeight: "600" },
   modelButton: {
     flexDirection: "row",
     alignItems: "center",

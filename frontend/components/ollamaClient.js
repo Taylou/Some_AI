@@ -45,4 +45,23 @@ export class OllamaClient {
 
     return response.json(); // { sessionId, reply }
   }
+
+  /**
+   * Delete a session and its history from Redis on the backend.
+   *
+   * @param {string} sessionId
+   * @returns {Promise<{ success: boolean, sessionId: string }>}
+   */
+  async deleteSession(sessionId) {
+    const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Backend error ${response.status}: ${text || response.statusText}`);
+    }
+
+    return response.json(); // { success, sessionId }
+  }
 }
