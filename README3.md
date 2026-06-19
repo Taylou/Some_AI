@@ -1,6 +1,6 @@
 # Lab 3 — Benchmark & Load Testing with K6
 
-This is the third lab, after the main [README.md](README.md) (Redis + Ollama + Express) and
+After the main [README.md](README.md) (Redis + Ollama + Express) and
 the testing guide [README2.md](README2.md) (Cypress E2E). Cypress told us whether the app is
 **correct**. K6 tells us whether it's **fast enough under concurrency** — how many requests
 per second it can serve, how latency behaves as users pile on, and where it breaks.
@@ -127,9 +127,6 @@ docker run --rm -i \
 Notes:
 - **PowerShell:** `${PWD}` works as written. The repo path contains spaces, so keep the volume
   argument **quoted** exactly as above.
-- **Git Bash (MSYS):** it rewrites `/scripts/...` into a Windows path and breaks the run. Prefix the
-  command with `MSYS_NO_PATHCONV=1` (e.g. `MSYS_NO_PATHCONV=1 docker run ...`). PowerShell doesn't
-  need this.
 - **Can't join the network / on a different host?** Point K6 at the published port instead:
   `-e BASE_URL=http://host.docker.internal:3001` (and drop `--network`).
 
@@ -208,22 +205,9 @@ Note this **p95** — call it `P_real`. It will be far larger.
 - Compare runs by **p95**, not average — the average hides the slow tail.
 - To save a machine-readable summary, add `--summary-export=/scripts/results/summary.json` to the
   `k6 run` command (the `k6/results/` folder is git-ignored).
-- Knobs you can change without editing scripts: `-e BASE_URL=...`, `-e CHAT_PROFILE=real`, and
-  `MOCK_LATENCY_MS` on the mock service (uncomment it in
-  [docker-compose.k6.yml](docker-compose.k6.yml)) to simulate model think-time.
-
-### Cleaning up between runs
-
-The load and stress scripts create a lot of sessions in Redis (the chat test can create tens of
-thousands). That data isn't deleted automatically — deleting it one-by-one over HTTP doesn't scale.
-Flush Redis directly between heavy runs:
-
-```bash
-docker exec some-ai-redis redis-cli FLUSHALL
-```
-
-Or just tear the whole stack down with its volume: `docker compose -f docker-compose.yml -f
-docker-compose.k6.yml down -v`.
+- Knobs you can change without editing scripts: `-e BASE_URL=...`, `-e CHAT_PROFILE=real`,
+  `-e CLEANUP=false` (keep chat sessions after a run), and `MOCK_LATENCY_MS` on the mock service
+  (uncomment it in [docker-compose.k6.yml](docker-compose.k6.yml)) to simulate model think-time.
 
 ---
 
