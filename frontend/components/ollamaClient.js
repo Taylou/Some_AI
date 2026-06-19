@@ -17,7 +17,7 @@
 // from a phone running Expo Go.
 
 export class OllamaClient {
-  constructor({ baseUrl = "http://172.24.208.1:3001" } = {}) {
+  constructor({ baseUrl = "http://10.2.230.77:3001" } = {}) {
     this.baseUrl = baseUrl;
   }
 

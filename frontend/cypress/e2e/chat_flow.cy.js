@@ -24,7 +24,8 @@ describe("Chat flow", () => {
   it("forwards a sessionId on the second message", () => {
     cy.byTestId("message-input").type("First message");
     cy.byTestId("send-button").click();
-    cy.wait("@chat").its("request.body.sessionId").should("be.oneOf", [null, undefined]);
+    cy.wait("@chat").its("request.body.sessionId").should('not.exist');
+    
 
     cy.byTestId("message-input").type("Second message");
     cy.byTestId("send-button").click();

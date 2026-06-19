@@ -369,6 +369,35 @@ Add a "History" button in `frontend/components/ChatView.js` that:
 
 ---
 
+## Testing
+
+Automated end-to-end tests (Cypress) live in `frontend/cypress/`. They drive the
+app's web build in a real browser with the backend stubbed, so you can run them
+without Docker/Redis/Ollama:
+
+```bash
+cd frontend
+npm install
+npm run test:e2e
+```
+
+See **[README2.md](README2.md)** for the full testing guide.
+
+### Benchmarking (K6)
+
+Load and benchmark tests (K6) live in `k6/`, with a mock-Ollama "benchmark stack" so you can
+push real concurrency at the API without the LLM dominating the numbers:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.k6.yml up -d --build
+docker run --rm -i --network some-ai_default -e BASE_URL=http://api:3001 \
+  -v "${PWD}/k6:/scripts" grafana/k6 run /scripts/01-smoke.js
+```
+
+See **[README3.md](README3.md)** for the full benchmarking lab.
+
+---
+
 ## Useful Redis CLI Commands
 
 ```bash

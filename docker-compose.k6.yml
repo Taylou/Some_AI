@@ -1,0 +1,38 @@
+# Benchmark-mode override for the K6 lab (README3).
+#
+# Layer this on top of the base compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.k6.yml up -d --build
+#
+# It does two things:
+#   1. Adds a `mock-ollama` service — an instant, zero-dependency Ollama stand-in.
+#   2. Repoints the api service's OLLAMA_URL at that mock, so EVERY endpoint
+#      (including POST /api/chat) becomes fast and deterministic. Compose merges
+#      the `environment` map by key, so REDIS_URL and PORT from the base file
+#      are preserved — only OLLAMA_URL is overridden.
+#
+# Run the normal `docker compose up -d` (without this file) to go back to the
+# real Ollama for the Track B "real" benchmark.
+
+services:
+  api:
+    environment:
+      - OLLAMA_URL=http://mock-ollama:11434
+    depends_on:
+      redis:
+        condition: service_healthy
+      mock-ollama:
+        condition: service_started
+
+  mock-ollama:
+    build:
+      context: ./mock-ollama
+      dockerfile: Dockerfile
+    container_name: some-ai-mock-ollama
+    restart: unless-stopped
+    # No host port is published on purpose: the api container reaches the mock
+    # over the docker network as `mock-ollama:11434`. Publishing 11434 here would
+    # clash with a real Ollama already bound to that port on your host.
+    # Optional: simulate model "think time" by uncommenting the next two lines.
+    # environment:
+    #   - MOCK_LATENCY_MS=200

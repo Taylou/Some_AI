@@ -144,8 +144,19 @@ app.get("/api/sessions", async (req, res) => {
 app.get("/api/sessions/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
 
-  // TODO (student): implement this route
-  res.status(501).json({ error: "Not implemented yet — complete this as part of the lab exercise." });
+  try {
+    const entries = await redis.lrange(sessionKey(sessionId), 0, -1);
+
+    if (entries.length === 0) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    const messages = entries.map((entry) => JSON.parse(entry));
+    res.json({ sessionId, messages });
+  } catch (err) {
+    console.error("/api/sessions/:sessionId error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --------------------------------------------------------------------------
@@ -164,8 +175,19 @@ app.get("/api/sessions/:sessionId", async (req, res) => {
 app.delete("/api/sessions/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
 
-  // TODO (student): implement this route
-  res.status(501).json({ error: "Not implemented yet — complete this as part of the lab exercise." });
+  try {
+    const deleted = await redis.del(sessionKey(sessionId));
+    await redis.srem("sessions", sessionId);
+
+    if (deleted === 0) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    res.json({ success: true, sessionId });
+  } catch (err) {
+    console.error("DELETE /api/sessions/:sessionId error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────

@@ -39,3 +39,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Cypress
+frontend/cypress/videos/
+frontend/cypress/screenshots/
+frontend/cypress/downloads/
+
+# K6 results
+k6/results/
+*summary.json
