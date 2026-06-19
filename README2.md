@@ -160,7 +160,10 @@ stack instead:
 ## Roadmap
 
 - [x] **E2E tests** — app smoke, chat flow, clear chat (this session)
+<<<<<<< HEAD
 - [x] **Load / benchmark tests** — K6, see [README3.md](README3.md) (Lab 3)
+=======
+>>>>>>> 77a3a509105c8027aa5f79e122582022306a5b9c
 - [ ] **Component tests** — mount `ChatView`, `OllamaClient`, and `AIService` in
   isolation with Cypress Component Testing (next session)
 - [ ] Wire `npm run test:e2e` into CI
