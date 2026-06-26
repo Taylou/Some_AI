@@ -19,15 +19,16 @@ const POOL_SIZE = 20;
 
 export const options = {
   stages: [
-    { duration: "20s", target: 20 }, // ramp up to 20 VUs
-    { duration: "40s", target: 20 }, // hold
-    { duration: "10s", target: 0 }, // ramp down
+    { duration: "30s", target: 50 }, // ramp up to 50 VUs
+    { duration: "50s", target: 20 }, // hold
+    { duration: "10s", target: 10 }, // ramp down
   ],
   thresholds: {
     http_req_failed: ["rate<0.01"],
     http_req_duration: ["p(95)<50"], // tune to your hardware
     checks: ["rate>0.99"],
   },
+  setupTimeout: "5m",
 };
 
 // Runs once before the test. Returns data passed to every VU iteration.

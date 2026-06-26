@@ -14,7 +14,7 @@ import { check, sleep } from "k6";
 import { BASE_URL, createSession, deleteSession } from "./lib/helpers.js";
 
 export const options = {
-  vus: 1,
+  vus: 5,
   iterations: 10,
   thresholds: {
     http_req_failed: ["rate<0.01"], // <1% of requests may fail

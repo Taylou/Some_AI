@@ -396,6 +396,16 @@ docker run --rm -i --network some-ai_default -e BASE_URL=http://api:3001 \
 
 See **[README3.md](README3.md)** for the full benchmarking lab.
 
+### API Documentation (Swagger / OpenAPI)
+
+The backend serves interactive API docs once the stack is up:
+
+- **Swagger UI:** [http://localhost:3001/api/docs](http://localhost:3001/api/docs)
+- **Raw OpenAPI spec:** [http://localhost:3001/api/docs.json](http://localhost:3001/api/docs.json)
+
+The contract lives in [backend/swagger.js](backend/swagger.js). See **[README4.md](README4.md)** for
+the full documentation lab.
+
 ---
 
 ## Useful Redis CLI Commands

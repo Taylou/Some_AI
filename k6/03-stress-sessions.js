@@ -26,16 +26,18 @@ const POOL_SIZE = 30;
 
 export const options = {
   stages: [
-    { duration: "30s", target: 50 },
-    { duration: "30s", target: 100 },
-    { duration: "30s", target: 150 },
-    { duration: "30s", target: 0 },
+    { duration: "50s", target: 50 },
+    { duration: "50s", target: 100 },
+    { duration: "50s", target: 150 },
+    { duration: "50s", target: 20 },
   ],
   thresholds: {
     // Abort the run if the failure rate becomes hopeless.
     http_req_failed: [{ threshold: "rate<0.05", abortOnFail: true }],
     http_req_duration: ["p(95)<500"], // informational ceiling — may break
+    
   },
+  setupTimeout: "5m",
 };
 
 export function setup() {

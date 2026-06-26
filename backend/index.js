@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const Redis = require("ioredis");
 const { v4: uuidv4 } = require("uuid");
+const swaggerUi = require("swagger-ui-express");
+const openapiSpec = require("./swagger");
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -41,6 +43,20 @@ async function appendMessage(sessionId, role, content) {
   await redis.rpush(sessionKey(sessionId), entry);
   await redis.sadd("sessions", sessionId);
 }
+
+// ─── API documentation (Swagger / OpenAPI) ─────────────────────────────────────
+//
+//  Interactive UI:  GET /api/docs
+//  Raw spec (JSON): GET /api/docs.json   (import into Postman/Insomnia, codegen…)
+//
+// The contract itself lives in ./swagger.js.
+
+app.use(
+  "/api/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(openapiSpec, { customSiteTitle: "some-ai API docs" })
+);
+app.get("/api/docs.json", (req, res) => res.json(openapiSpec));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -129,17 +145,9 @@ app.get("/api/sessions", async (req, res) => {
 // --------------------------------------------------------------------------
 // GET /api/sessions/:sessionId
 //
-// TODO (student): Retrieve the full chat history for a given session.
-//
-// Steps to implement:
-//  1. Use redis.lrange(sessionKey(sessionId), 0, -1) to get all messages
-//     from the list. LRANGE returns all elements from index 0 to -1 (end).
-//  2. Each element is a JSON string — parse it with JSON.parse().
-//  3. Return { sessionId, messages: [...parsed messages] }
-//  4. If the session does not exist (empty array), return a 404 with
-//     { error: "Session not found" }
-//
-// Hint: sessionKey(sessionId) builds the correct Redis key for you.
+// Returns the full chat history for a session. Reads the session's Redis LIST
+// with LRANGE, parses each JSON entry, and responds with { sessionId, messages }.
+// Returns 404 if the session has no stored messages.
 // --------------------------------------------------------------------------
 app.get("/api/sessions/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
@@ -162,15 +170,9 @@ app.get("/api/sessions/:sessionId", async (req, res) => {
 // --------------------------------------------------------------------------
 // DELETE /api/sessions/:sessionId
 //
-// TODO (student): Delete a session and its chat history from Redis.
-//
-// Steps to implement:
-//  1. Use redis.del(sessionKey(sessionId)) to remove the message list.
-//  2. Use redis.srem("sessions", sessionId) to remove the ID from the index.
-//  3. Return { success: true, sessionId } on success.
-//  4. If the session did not exist (del returns 0), return a 404.
-//
-// Hint: redis.del() returns the number of keys that were deleted.
+// Deletes a session and its chat history. Removes the session's Redis LIST
+// (DEL) and its id from the "sessions" SET (SREM), then responds with
+// { success: true, sessionId }. Returns 404 if the session did not exist.
 // --------------------------------------------------------------------------
 app.delete("/api/sessions/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
@@ -194,6 +196,7 @@ app.delete("/api/sessions/:sessionId", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
+  console.log(`API docs:      http://localhost:${PORT}/api/docs`);
   console.log(`Ollama target: ${OLLAMA_URL}`);
   console.log(`Redis: ${REDIS_URL}`);
 });
