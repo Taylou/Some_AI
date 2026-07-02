@@ -403,8 +403,9 @@ The backend serves interactive API docs once the stack is up:
 - **Swagger UI:** [http://localhost:3001/api/docs](http://localhost:3001/api/docs)
 - **Raw OpenAPI spec:** [http://localhost:3001/api/docs.json](http://localhost:3001/api/docs.json)
 
-The contract lives in [backend/swagger.js](backend/swagger.js). See **[README4.md](README4.md)** for
-the full documentation lab.
+The contract lives in [backend/swagger.js](backend/swagger.js) plus `@openapi` JSDoc blocks on each
+route. See **[README4.md](README4.md)** (Swagger setup) and **[README5.md](README5.md)** (refactor to
+JSDoc-generated docs) for the full labs.
 
 ---
 

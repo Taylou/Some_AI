@@ -1,24 +1,28 @@
 // backend/swagger.js
 //
-// The OpenAPI 3.0 contract for the some-ai backend, written as a plain JS object.
+// Builds the OpenAPI 3.0 contract for the some-ai backend with `swagger-jsdoc`.
 //
-// Why a hand-written object (and not JSDoc annotations)? It keeps the WHOLE API
-// contract in one readable file — a single source of truth, decoupled from the
-// route handlers — without introducing JSDoc syntax yet. A later lab refactors
-// this into JSDoc comments auto-collected by `swagger-jsdoc`.
+// Two halves make up the final spec:
+//   1. This file holds the BASE definition — info, servers, tags, and the
+//      reusable `components` (schemas + responses). These are shared across many
+//      routes, so they stay centralized.
+//   2. Each ROUTE documents its own path in an `@openapi` JSDoc comment right
+//      above the handler in index.js. swagger-jsdoc scans the files listed in
+//      `apis`, parses those comments as YAML, and merges them into `paths`.
 //
-// This object is served two ways from index.js:
+// The assembled spec is still served from index.js:
 //   - Interactive Swagger UI at  GET /api/docs
 //   - Raw JSON spec at           GET /api/docs.json
 //
-// Best practices used here:
-//   - Reusable components.schemas / components.responses ($ref'd, so we don't
-//     repeat the same shapes on every route).
-//   - Every status code a route can return is documented (200/404/500/502).
-//   - A RELATIVE server url ("/") so Swagger UI's "Try it out" targets whatever
-//     host served the page — works from localhost AND a phone on your LAN IP.
+// Why JSDoc-on-routes? The docs for an endpoint live next to the code that
+// implements it, so they're far more likely to be updated together (less drift).
+// This replaces the earlier hand-written `paths` object (see README4 → README5).
 
-const openapiSpec = {
+const path = require("path");
+const swaggerJSDoc = require("swagger-jsdoc");
+
+// The base document. swagger-jsdoc fills in `paths` from the JSDoc annotations.
+const definition = {
   openapi: "3.0.3",
 
   info: {
@@ -208,133 +212,12 @@ const openapiSpec = {
       },
     },
   },
-
-  paths: {
-    "/api/health": {
-      get: {
-        tags: ["Health"],
-        operationId: "getHealth",
-        summary: "Health check",
-        description: "Confirms the server is reachable and reports Redis/Ollama status.",
-        responses: {
-          200: {
-            description: "Service is up.",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/HealthResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-
-    "/api/chat": {
-      post: {
-        tags: ["Chat"],
-        operationId: "postChat",
-        summary: "Send a chat message",
-        description:
-          "Forwards the conversation to Ollama, persists the last user message " +
-          "and the assistant reply to Redis, and returns the reply plus the " +
-          "session id. Omit `sessionId` to start a new conversation.\n\n" +
-          "Note: this calls a real model, so it can take several seconds. To " +
-          "explore the docs quickly, run the mock-Ollama benchmark stack from README3.",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/ChatRequest" },
-              example: {
-                model: "deepseek-r1:1.5b",
-                messages: [{ role: "user", content: "Hello! What is Redis?" }],
-              },
-            },
-          },
-        },
-        responses: {
-          200: {
-            description: "The assistant reply and the session id.",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ChatResponse" },
-              },
-            },
-          },
-          502: { $ref: "#/components/responses/BadGateway" },
-          500: { $ref: "#/components/responses/ServerError" },
-        },
-      },
-    },
-
-    "/api/sessions": {
-      get: {
-        tags: ["Sessions"],
-        operationId: "listSessions",
-        summary: "List all session ids",
-        description: "Returns every session id stored in the Redis `sessions` SET.",
-        responses: {
-          200: {
-            description: "Array of session ids.",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SessionList" },
-              },
-            },
-          },
-          500: { $ref: "#/components/responses/ServerError" },
-        },
-      },
-    },
-
-    "/api/sessions/{sessionId}": {
-      parameters: [
-        {
-          name: "sessionId",
-          in: "path",
-          required: true,
-          description: "The session id (UUID returned by /api/chat).",
-          schema: { type: "string" },
-        },
-      ],
-      get: {
-        tags: ["Sessions"],
-        operationId: "getSession",
-        summary: "Get a session's history",
-        description: "Returns every stored message for the session, in order.",
-        responses: {
-          200: {
-            description: "The full chat history.",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SessionHistory" },
-              },
-            },
-          },
-          404: { $ref: "#/components/responses/NotFound" },
-          500: { $ref: "#/components/responses/ServerError" },
-        },
-      },
-      delete: {
-        tags: ["Sessions"],
-        operationId: "deleteSession",
-        summary: "Delete a session",
-        description: "Removes the session's message list and its id from the index.",
-        responses: {
-          200: {
-            description: "The session was deleted.",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/DeleteResponse" },
-              },
-            },
-          },
-          404: { $ref: "#/components/responses/NotFound" },
-          500: { $ref: "#/components/responses/ServerError" },
-        },
-      },
-    },
-  },
 };
+
+// Scan index.js for `@openapi` JSDoc blocks and merge their paths into the spec.
+const openapiSpec = swaggerJSDoc({
+  definition,
+  apis: [path.join(__dirname, "index.js")],
+});
 
 module.exports = openapiSpec;

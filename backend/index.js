@@ -46,10 +46,12 @@ async function appendMessage(sessionId, role, content) {
 
 // ─── API documentation (Swagger / OpenAPI) ─────────────────────────────────────
 //
-//  Interactive UI:  GET /api/docs
-//  Raw spec (JSON): GET /api/docs.json   (import into Postman/Insomnia, codegen…)
+//  Interactive console:  GET /api/docs    (Swagger UI — read + "Try it out")
+//  Reference site:        GET /api/redoc   (Redoc — clean, three-panel docs)
+//  Raw spec (JSON):       GET /api/docs.json  (import into Postman/Insomnia, codegen…)
 //
-// The contract itself lives in ./swagger.js.
+// The base definition (info, servers, components) lives in ./swagger.js; each
+// route's path is documented in the `@openapi` JSDoc block above its handler.
 
 app.use(
   "/api/docs",
@@ -58,28 +60,77 @@ app.use(
 );
 app.get("/api/docs.json", (req, res) => res.json(openapiSpec));
 
+// Redoc renders the same spec as a polished reference site. It's a single HTML
+// page that loads the Redoc bundle from a CDN and points at /api/docs.json —
+// no extra npm dependency required (needs internet the first time it loads).
+const redocHtml = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>some-ai API reference</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>body { margin: 0; padding: 0; }</style>
+  </head>
+  <body>
+    <redoc spec-url="/api/docs.json"></redoc>
+    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  </body>
+</html>`;
+app.get("/api/redoc", (req, res) => res.type("html").send(redocHtml));
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-// Health check — useful to confirm the server is reachable
+/**
+ * @openapi
+ * /api/health:
+ *   get:
+ *     tags: [Health]
+ *     operationId: getHealth
+ *     summary: Health check
+ *     description: Confirms the server is reachable and reports Redis/Ollama status.
+ *     responses:
+ *       200:
+ *         description: Service is up.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/HealthResponse' }
+ */
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", redis: redis.status, ollama: OLLAMA_URL });
 });
 
-// --------------------------------------------------------------------------
-// POST /api/chat
-//
-// Body: {
-//   sessionId?: string,   // omit to start a new session
-//   model: string,        // e.g. "deepseek-r1:1.5b"
-//   messages: [{ role, content }]
-// }
-//
-// What this does (PRE-IMPLEMENTED):
-//  1. Generates a sessionId if one is not provided
-//  2. Forwards the messages to Ollama's /api/chat endpoint
-//  3. Saves the last user message and the assistant reply to Redis
-//  4. Returns the assistant reply and the sessionId
-// --------------------------------------------------------------------------
+/**
+ * @openapi
+ * /api/chat:
+ *   post:
+ *     tags: [Chat]
+ *     operationId: postChat
+ *     summary: Send a chat message
+ *     description: >-
+ *       Forwards the conversation to Ollama, persists the last user message and
+ *       the assistant reply to Redis, and returns the reply plus the session id.
+ *       Omit `sessionId` to start a new conversation.
+ *
+ *       Note: this calls a real model, so it can take several seconds. To explore
+ *       the docs quickly, run the mock-Ollama benchmark stack from README3.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/ChatRequest' }
+ *           example:
+ *             model: deepseek-r1:1.5b
+ *             messages:
+ *               - { role: user, content: "Hello! What is Redis?" }
+ *     responses:
+ *       200:
+ *         description: The assistant reply and the session id.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ChatResponse' }
+ *       502: { $ref: '#/components/responses/BadGateway' }
+ *       500: { $ref: '#/components/responses/ServerError' }
+ */
 app.post("/api/chat", async (req, res) => {
   try {
     const { model = "deepseek-r1:1.5b", messages = [], systemPrompt } = req.body;
@@ -124,14 +175,22 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// --------------------------------------------------------------------------
-// GET /api/sessions
-//
-// Returns the list of all session IDs stored in Redis.
-//
-// What this does (PRE-IMPLEMENTED):
-//  - Reads the "sessions" Redis SET and returns its members as an array
-// --------------------------------------------------------------------------
+/**
+ * @openapi
+ * /api/sessions:
+ *   get:
+ *     tags: [Sessions]
+ *     operationId: listSessions
+ *     summary: List all session ids
+ *     description: Returns every session id stored in the Redis `sessions` SET.
+ *     responses:
+ *       200:
+ *         description: Array of session ids.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/SessionList' }
+ *       500: { $ref: '#/components/responses/ServerError' }
+ */
 app.get("/api/sessions", async (req, res) => {
   try {
     const sessionIds = await redis.smembers("sessions");
@@ -142,13 +201,29 @@ app.get("/api/sessions", async (req, res) => {
   }
 });
 
-// --------------------------------------------------------------------------
-// GET /api/sessions/:sessionId
-//
-// Returns the full chat history for a session. Reads the session's Redis LIST
-// with LRANGE, parses each JSON entry, and responds with { sessionId, messages }.
-// Returns 404 if the session has no stored messages.
-// --------------------------------------------------------------------------
+/**
+ * @openapi
+ * /api/sessions/{sessionId}:
+ *   get:
+ *     tags: [Sessions]
+ *     operationId: getSession
+ *     summary: Get a session's history
+ *     description: Returns every stored message for the session, in order.
+ *     parameters:
+ *       - name: sessionId
+ *         in: path
+ *         required: true
+ *         description: The session id (UUID returned by /api/chat).
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: The full chat history.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/SessionHistory' }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ *       500: { $ref: '#/components/responses/ServerError' }
+ */
 app.get("/api/sessions/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
 
@@ -167,13 +242,29 @@ app.get("/api/sessions/:sessionId", async (req, res) => {
   }
 });
 
-// --------------------------------------------------------------------------
-// DELETE /api/sessions/:sessionId
-//
-// Deletes a session and its chat history. Removes the session's Redis LIST
-// (DEL) and its id from the "sessions" SET (SREM), then responds with
-// { success: true, sessionId }. Returns 404 if the session did not exist.
-// --------------------------------------------------------------------------
+/**
+ * @openapi
+ * /api/sessions/{sessionId}:
+ *   delete:
+ *     tags: [Sessions]
+ *     operationId: deleteSession
+ *     summary: Delete a session
+ *     description: Removes the session's message list and its id from the index.
+ *     parameters:
+ *       - name: sessionId
+ *         in: path
+ *         required: true
+ *         description: The session id (UUID returned by /api/chat).
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: The session was deleted.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/DeleteResponse' }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ *       500: { $ref: '#/components/responses/ServerError' }
+ */
 app.delete("/api/sessions/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
 
@@ -196,7 +287,8 @@ app.delete("/api/sessions/:sessionId", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
-  console.log(`API docs:      http://localhost:${PORT}/api/docs`);
+  console.log(`API docs:      http://localhost:${PORT}/api/docs   (Swagger UI)`);
+  console.log(`API reference: http://localhost:${PORT}/api/redoc  (Redoc)`);
   console.log(`Ollama target: ${OLLAMA_URL}`);
   console.log(`Redis: ${REDIS_URL}`);
 });
