@@ -1,0 +1,149 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Continuous Integration — see README6.md (Lab 6)
+#
+# Runs on every push to main and on every pull request. Four independent jobs
+# drive the tooling the earlier labs already built:
+#
+#   lint         → node --check on the CommonJS server files (backend, mock)
+#   e2e          → Cypress suite via the existing `npm run test:e2e`  (Lab 2)
+#   api-k6       → full Docker stack + K6 smoke test as a gate        (Lab 3)
+#   docker-build → the backend + mock-ollama images actually build
+#
+# Nothing here needs a cloud account: it all runs on GitHub-hosted runners.
+# ─────────────────────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch/PR cancels the in-flight run — no wasted minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: the workflow only needs to read the checked-out code.
+permissions:
+  contents: read
+
+jobs:
+  # ── Static syntax gate ──────────────────────────────────────────────────────
+  # `node --check` parses a file without running it. It only works on CommonJS,
+  # so we point it at the server files (backend/, mock-ollama/). The frontend
+  # (JSX) and k6 scripts (ES modules) are syntax-checked by their own runtimes
+  # in the `e2e` and `api-k6` jobs below.
+  lint:
+    name: Lint (syntax check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+      - name: Check server syntax
+        run: |
+          node --check backend/index.js
+          node --check backend/swagger.js
+          node --check mock-ollama/server.js
+
+  # ── Frontend end-to-end tests (Cypress) ─────────────────────────────────────
+  # Reuses the exact command a developer runs locally. start-server-and-test
+  # boots Expo web on :8081, waits for it, runs `cypress run` (bundled Electron —
+  # no browser install needed), then tears the server down. The specs stub the
+  # backend with cy.intercept(), so no API/Redis is required here.
+  e2e:
+    name: E2E (Cypress)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Run Cypress against Expo web
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Upload Cypress screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: frontend/cypress/screenshots
+          if-no-files-found: ignore
+
+  # ── API integration + load gate (K6) ────────────────────────────────────────
+  # Brings up the real stack (Redis + Express API) with the deterministic
+  # mock-ollama override, then runs the K6 smoke test. K6 exits non-zero when its
+  # thresholds (<1% failures, >99% checks pass) are breached, so a regression in
+  # any session endpoint fails the build.
+  api-k6:
+    name: API + K6 smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the stack (mock-ollama)
+        run: >-
+          docker compose -p some-ai
+          -f docker-compose.yml -f docker-compose.k6.yml
+          up -d --build
+
+      - name: Wait for the API to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3001/api/health >/dev/null; then
+              echo "API is up"; exit 0
+            fi
+            echo "waiting for API... ($i/30)"; sleep 2
+          done
+          echo "API did not become healthy in time"; exit 1
+
+      - name: Run K6 smoke test
+        run: |
+          mkdir -p k6/results
+          docker run --rm --network some-ai_default \
+            -e BASE_URL=http://api:3001 \
+            -v "$PWD/k6:/scripts" \
+            grafana/k6 run \
+            --summary-export=/scripts/results/ci-smoke.json \
+            /scripts/01-smoke.js
+
+      - name: Dump API logs on failure
+        if: failure()
+        run: docker compose -p some-ai logs --no-color
+
+      - name: Upload K6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: k6/results
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose -p some-ai -f docker-compose.yml -f docker-compose.k6.yml down -v
+
+  # ── Docker image build validation ───────────────────────────────────────────
+  # Proves the images still build from clean. Build-only (no registry push) —
+  # this lab stays local/CI-only.
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend image
+        run: docker build -t some-ai-backend:ci ./backend
+      - name: Build mock-ollama image
+        run: docker build -t some-ai-mock-ollama:ci ./mock-ollama

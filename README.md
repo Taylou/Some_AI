@@ -1,5 +1,7 @@
 # Redis + Ollama Lab
 
+[![CI](https://github.com/Taylou/Some_AI/actions/workflows/ci.yml/badge.svg)](https://github.com/Taylou/Some_AI/actions/workflows/ci.yml)
+
 A React Native chat app powered by Ollama AI models. In this lab you will add a **Redis database** and an **Express backend** using Docker Compose so that chat conversations are persisted across sessions.
 
 ---
@@ -406,6 +408,14 @@ The backend serves interactive API docs once the stack is up:
 The contract lives in [backend/swagger.js](backend/swagger.js) plus `@openapi` JSDoc blocks on each
 route. See **[README4.md](README4.md)** (Swagger setup) and **[README5.md](README5.md)** (refactor to
 JSDoc-generated docs) for the full labs.
+
+### Continuous Integration (GitHub Actions)
+
+Every push and pull request runs the whole suite automatically — lint, the Cypress E2E tests, a K6
+smoke test against the live stack, and a Docker image build — via [.github/workflows/ci.yml](.github/workflows/ci.yml).
+The badge at the top of this file shows the latest `main` status.
+
+See **[README6.md](README6.md)** for the full CI lab.
 
 ---
 
