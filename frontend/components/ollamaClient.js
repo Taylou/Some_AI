@@ -21,7 +21,6 @@ export class OllamaClient {
     this.baseUrl = baseUrl;
   }
 
-  // adding a comment here 
   /**
    * Send a chat request to the backend.
    *
