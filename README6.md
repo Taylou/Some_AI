@@ -141,7 +141,7 @@ CI activates the moment the workflow file is on GitHub:
 1. Commit and push:
    ```bash
    git add .github/workflows/ci.yml README6.md .env.example README.md
-   git commit -m "Add CI pipeline (Lab 6)"
+   git commit -m "Add CI pipeline"
    git push
    ```
 2. Open your repo on GitHub → the **Actions** tab. You'll see the run, with the four jobs streaming
