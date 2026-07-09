@@ -1,0 +1,16 @@
+# Grafana datasource provisioning.
+#
+# Dropping this file in /etc/grafana/provisioning/datasources makes Grafana wire
+# up Prometheus automatically on startup — no clicking through the UI. Grafana
+# reaches Prometheus by its compose service name over the shared network.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true

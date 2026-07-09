@@ -417,6 +417,21 @@ The badge at the top of this file shows the latest `main` status.
 
 See **[README6.md](README6.md)** for the full CI lab.
 
+### Monitoring (Prometheus + Grafana)
+
+The backend exposes Prometheus metrics at `/metrics`, and a layered override adds Prometheus, Grafana
+(with a pre-provisioned RED dashboard), and a Redis exporter. Bring the whole thing up and open Grafana
+at [http://localhost:3000](http://localhost:3000):
+
+```bash
+docker compose -p some-ai \
+  -f docker-compose.yml -f docker-compose.k6.yml -f docker-compose.observability.yml \
+  up -d --build
+```
+
+Then run a K6 script and watch the dashboard move in real time. See **[README7.md](README7.md)** for the
+full observability lab (plus an optional Wireshark/tshark appendix).
+
 ---
 
 ## Useful Redis CLI Commands

@@ -4,6 +4,7 @@ const Redis = require("ioredis");
 const { v4: uuidv4 } = require("uuid");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./swagger");
+const client = require("prom-client");
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -23,6 +24,47 @@ redis.on("error", (err) => console.error("Redis error:", err.message));
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ─── Metrics (Prometheus / prom-client) ─────────────────────────────────────────
+//
+//  Everything the API measures is exposed as plain text at  GET /metrics , which
+//  Prometheus scrapes on a schedule (see monitoring/prometheus.yml). Grafana then
+//  graphs it (Lab 7 / README7).
+//
+//  We collect two things:
+//    1. Default process metrics (CPU, memory, event-loop lag, GC) via collectDefaultMetrics.
+//    2. An HTTP request histogram — the "RED" signals: Rate, Errors, Duration.
+
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+const httpDuration = new client.Histogram({
+  name: "http_request_duration_seconds",
+  help: "Duration of HTTP requests in seconds",
+  labelNames: ["method", "route", "status_code"],
+  // Buckets tuned for a fast Redis-backed API: sub-ms to a few seconds.
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [register],
+});
+
+// Time every request. We read `req.route.path` (e.g. "/api/sessions/:sessionId")
+// rather than `req.path` so session IDs don't explode the label cardinality — a
+// classic Prometheus footgun. The timer stops when the response finishes.
+app.use((req, res, next) => {
+  const stop = httpDuration.startTimer();
+  res.on("finish", () => {
+    const route = req.route ? req.baseUrl + req.route.path : req.path;
+    stop({ method: req.method, route, status_code: res.statusCode });
+  });
+  next();
+});
+
+// The scrape endpoint. Deliberately outside /api (it's operational, not part of
+// the public API contract) and not documented in Swagger.
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", register.contentType);
+  res.end(await register.metrics());
+});
 
 // ─── Redis data model ─────────────────────────────────────────────────────────
 //
