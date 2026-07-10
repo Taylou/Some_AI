@@ -5,6 +5,8 @@ const { v4: uuidv4 } = require("uuid");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./swagger");
 const client = require("prom-client");
+const register = new client.Registry();
+client.collectDefaultMetrics( { register });
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
