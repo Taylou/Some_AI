@@ -37,8 +37,8 @@ app.use(express.json());
 //    1. Default process metrics (CPU, memory, event-loop lag, GC) via collectDefaultMetrics.
 //    2. An HTTP request histogram — the "RED" signals: Rate, Errors, Duration.
 
-const register = new client.Registry();
-client.collectDefaultMetrics({ register });
+// const register = new client.Registry();
+// client.collectDefaultMetrics({ register });
 
 const httpDuration = new client.Histogram({
   name: "http_request_duration_seconds",
