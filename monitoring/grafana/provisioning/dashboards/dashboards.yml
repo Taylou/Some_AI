@@ -1,0 +1,19 @@
+# Grafana dashboard provisioning.
+#
+# Tells Grafana to load any dashboard JSON it finds under the mounted path, so the
+# some-ai dashboard appears automatically on first boot. Edit-and-refresh works too:
+# updateIntervalSeconds re-reads the files periodically.
+
+apiVersion: 1
+
+providers:
+  - name: some-ai
+    orgId: 1
+    folder: "some-ai"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

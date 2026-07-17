@@ -108,6 +108,14 @@ jobs:
           done
           echo "API did not become healthy in time"; exit 1
 
+      - name: Assert the /metrics endpoint is instrumented
+        # The prom-client instrumentation (Lab 7) must be live: the endpoint should
+        # exist and expose our HTTP histogram. This runs against the same image the
+        # rest of the job exercises, so a broken build fails here.
+        run: |
+          curl -fsS http://localhost:3001/metrics | grep -q http_request_duration_seconds \
+            && echo "/metrics is serving the HTTP histogram"
+
       - name: Run K6 smoke test
         run: |
           mkdir -p k6/results
@@ -147,3 +155,20 @@ jobs:
         run: docker build -t some-ai-backend:ci ./backend
       - name: Build mock-ollama image
         run: docker build -t some-ai-mock-ollama:ci ./mock-ollama
+
+  # ── Monitoring config validation ────────────────────────────────────────────
+  # Static checks for the observability lab (Lab 7): the Prometheus config must be
+  # valid, and the Grafana dashboard must be parseable JSON. Both are fast and need
+  # no running stack.
+  monitoring:
+    name: Monitoring config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Prometheus config (promtool)
+        run: |
+          docker run --rm -v "$PWD/monitoring/prometheus.yml:/p.yml:ro" \
+            --entrypoint promtool prom/prometheus check config /p.yml
+      - name: Validate Grafana dashboard JSON
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('monitoring/grafana/dashboards/some-ai.json','utf8')); console.log('dashboard JSON ok')"

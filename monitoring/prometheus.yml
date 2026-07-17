@@ -1,0 +1,31 @@
+# Prometheus scrape configuration for the some-ai observability lab (README7).
+#
+# Prometheus PULLS metrics: on a schedule it GETs each target's /metrics endpoint
+# and stores the numbers as time series. Grafana then queries Prometheus.
+#
+# All targets are addressed by their docker-compose SERVICE NAME (api, redis-exporter)
+# because Prometheus runs on the same compose network.
+
+global:
+  # Scrape every 5s so the dashboard feels "live" during a k6 run. (Production
+  # defaults are usually 15–60s; 5s is fine for a lab, heavier at real scale.)
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Prometheus scraping itself — handy for confirming Prometheus is healthy.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # The Express API's application metrics (prom-client — RED signals + process stats).
+  - job_name: api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:3001"]
+
+  # Redis internals (memory, clients, ops/sec) via redis_exporter, which translates
+  # Redis INFO into Prometheus metrics.
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]

@@ -1,0 +1,69 @@
+# Observability override for the monitoring lab (README7 / Lab 7).
+#
+# Layer it on top of the base stack (and, if you want deterministic load, the k6
+# mock stack too):
+#
+#   docker compose -p some-ai \
+#     -f docker-compose.yml -f docker-compose.k6.yml -f docker-compose.observability.yml \
+#     up -d --build
+#
+# It adds three services:
+#   prometheus      — scrapes /metrics from the API and Redis, stores time series
+#   grafana         — graphs Prometheus (dashboard auto-provisioned, no clicking)
+#   redis-exporter  — turns Redis INFO into Prometheus metrics
+#
+# Ports: Grafana 3000, Prometheus 9090, redis-exporter 9121 — all free (the base
+# stack uses 3001 / 5540 / 6379, the frontend 8081).
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: some-ai-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      # Lets k6 push its own metrics in via remote write (see README7's k6 tie-in).
+      - "--web.enable-remote-write-receiver"
+    depends_on:
+      - redis-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: some-ai-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Lab-friendly access: open the dashboard with no login. Do NOT do this in prod.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_DEFAULT_THEME=light
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: some-ai-redis-exporter
+    restart: unless-stopped
+    ports:
+      - "9121:9121"
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    depends_on:
+      - redis
+
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
